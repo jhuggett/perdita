@@ -1,0 +1,19 @@
+{
+  "moduleResolution": "node",
+  "target": "es6",
+  "module": "commonjs",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "build", "src/**/*.test.ts"],
+  "esModuleInterop": true,
+  "allowSyntheticDefaultImports": true,
+  "compilerOptions": {
+      "target": "es5",
+      "lib": [
+        "es2019"
+      ],
+      "outDir": "bin",
+      "resolveJsonModule": true,
+      "noImplicitUseStrict": true,
+      "downlevelIteration": true
+  }
+}
