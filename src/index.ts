@@ -17,6 +17,10 @@ class Bucket {
     ideas: Idea[] = []
     ideaMap: Map<string, Idea> = new Map()
 
+
+    start: Idea | null
+    end: Idea | null
+
     constructor(
         public name: string
     ) {}
@@ -45,14 +49,78 @@ class Bucket {
     } 
 }
 
-class Idea {
+class Link {
+    next: Link | null
+    previous: Link | null
+
+
+    append(link: Link) {
+        if (this.next) {
+            this.next.previous = link
+        }
+        link.previous = this
+        link.next = this.next
+        this.next = link
+    }
+
+    prepend(link: Link) {
+        if (this.previous) {
+            this.previous.next = link
+        }
+        link.previous = this.previous
+        link.next = this
+        this.previous = link
+    }
+
+    remove() {
+        if (this.previous && this.next) {
+            this.previous.next = this.next
+            this.next.previous = this.previous
+        } else if (this.previous) {
+            this.previous.next = null
+        } else if (this.next) {
+            this.next.previous = null
+        }
+    }
+}
+
+class Idea extends Link {
     constructor(
         public name: string,
         public rank: number | null = null
-    ) {}
+    ) {
+        super()
+    }
 
     get id() {
         return this.name
+    }
+
+
+    previous: Idea | null
+    next: Idea | null
+
+    moveUp() {
+        if (this.previous) {
+            const previousPrevious = this.previous
+            const previousNext = this.next
+
+            this.previous = previousPrevious.previous
+            this.next = previousPrevious
+
+            previousPrevious.previous = this
+            previousPrevious.next = previousPrevious
+
+            previousNext.previous = previousPrevious
+
+            this.rank--
+        } else {
+            throw new Error(`Can't go higher!`)
+        }
+    }
+
+    moveDown() {
+
     }
 }
 
@@ -143,11 +211,14 @@ const interactionLoop = async (main: Box, pathToPerdita: string) => {
 const interactWithBucket = async (main: Box, bucket: Bucket) => {
     const linesAvailible = main.paddedHeight
     
-    let currentIndex = 0
-    let current = bucket.ideas[currentIndex]
+    let indexes = new Map([[0, 0]])
     let horizontalMovement = 0
     const limitRight = 1
     const limitLeft = 0
+
+    const getCurrentIndex = () => indexes.get(horizontalMovement)
+    const getCurrentIdea = () => bucket.ideas[getCurrentIndex()]
+
 
     const render = () => {
         main.focus()
@@ -156,21 +227,12 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
             main.write(`None of your ideas have been captured yet.`)
             main.writeOnNewline('Best get writing! Press |fg[green];b>+| to add an idea')
         } else {
+            const currentIndex = getCurrentIndex()
+            const currentIdea = getCurrentIdea()
             for (let [index, idea] of bucket.ideas.entries()) {
+                
+                if (index)
 
-                if (index === current.rank && horizontalMovement === 1) {
-                    main.write(`${horizontalMovement === 1 ? '<-               ' : ''}|inverse>${current.name}|`)
-                    main.return()
-                }
-                if (idea.id === current.id && horizontalMovement === 1) {
-                    if (index !== current.rank) {
-                        main.write('----------')
-                        main.return()
-                    }
-                } else {
-                    main.write(`|${current.id === idea.id ? 'inverse' : ''}>${idea.name}`)
-                    main.return()
-                }
             }
         }
         
