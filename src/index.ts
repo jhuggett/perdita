@@ -1,192 +1,15 @@
 #!/usr/bin/env node
 
 import { Box, getFullscreenBoxConfig } from "./box"
-import { input, keypress, Keys, target, Terminal } from "./Terminal"
+import { input, keypress, Keys, round, target, Terminal } from "./Terminal"
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs"
 import { join } from 'path'
+import { Bucket } from "./bucket"
+import { BucketManager, NoBucketsExistError } from "./bucket-manager"
+import { Idea } from "./idea"
 
 export const MAIN_FOLDER_NAME = '.perdita'
 
-export class IdeaAlreadyExistsError extends Error {
-    constructor() {
-        super('Idea already exists!')
-    }
-}
-
-class Bucket {
-    ideas: Idea[] = []
-    ideaMap: Map<string, Idea> = new Map()
-
-
-    start: Idea | null
-    end: Idea | null
-
-    constructor(
-        public name: string
-    ) {}
-
-
-    addIdea(idea: Idea) {
-        if (this.ideaMap.has(idea.id)) {
-            throw new IdeaAlreadyExistsError()
-        }
-        idea.rank = this.ideas.length
-        this.ideas.push(idea)
-        this.ideaMap.set(idea.id, idea)
-    }
-    
-
-    persist = () => {
-
-    }
-
-    static load = (data: string) => {
-        // parse data
-        // make bucket filled with data
-        // return bucket
-
-        return new Bucket('')
-    } 
-}
-
-class Link {
-    next: Link | null
-    previous: Link | null
-
-
-    append(link: Link) {
-        if (this.next) {
-            this.next.previous = link
-        }
-        link.previous = this
-        link.next = this.next
-        this.next = link
-    }
-
-    prepend(link: Link) {
-        if (this.previous) {
-            this.previous.next = link
-        }
-        link.previous = this.previous
-        link.next = this
-        this.previous = link
-    }
-
-    remove() {
-        if (this.previous && this.next) {
-            this.previous.next = this.next
-            this.next.previous = this.previous
-        } else if (this.previous) {
-            this.previous.next = null
-        } else if (this.next) {
-            this.next.previous = null
-        }
-    }
-}
-
-class Idea extends Link {
-    constructor(
-        public name: string,
-        public rank: number | null = null
-    ) {
-        super()
-    }
-
-    get id() {
-        return this.name
-    }
-
-
-    previous: Idea | null
-    next: Idea | null
-
-    moveUp() {
-        if (this.previous) {
-            const previousPrevious = this.previous
-            const previousNext = this.next
-
-            this.previous = previousPrevious.previous
-            this.next = previousPrevious
-
-            previousPrevious.previous = this
-            previousPrevious.next = previousPrevious
-
-            previousNext.previous = previousPrevious
-
-            this.rank--
-        } else {
-            throw new Error(`Can't go higher!`)
-        }
-    }
-
-    moveDown() {
-
-    }
-}
-
-
-class NoBucketsExistError extends Error {
-    constructor() {
-        super("No buckets exist!")
-    }
-}
-
-class DuplicateBucketNameError extends Error {
-    constructor() {
-        super("Bucket name is already in use!")
-    }
-}
-
-class BucketManager {
-    buckets: Bucket[] = []
-    private bucketMap: Map<string, Bucket> = new Map()
-    private bucketsFolderName = "buckets"
-
-    constructor(
-        private pathToBucketsData: string
-    ) {}
-
-
-    loadBucketsFromFileSystem() {
-        const pathToBucketFolder = join(this.pathToBucketsData, this.bucketsFolderName)
-
-        const files = readdirSync(pathToBucketFolder)
-
-        if (files.length < 1) {
-            throw new NoBucketsExistError()
-        }
-
-        for (let filename of files) {
-            const path = join(pathToBucketFolder, filename)
-            const fileContents = readFileSync(path, 'utf-8')
-            const bucket = Bucket.load(fileContents)
-            this.addBucket(bucket)
-        }
-    }
-
-    getBucket(name: string) {
-        return this.bucketMap.get(name)
-    }
-
-    hasBucket(name: string) {
-        return this.bucketMap.has(name)
-    }
-
-    addBucket(bucket: Bucket) {
-        // check for dup name
-        if (this.hasBucket(bucket.name)) {
-            throw new DuplicateBucketNameError()
-        }
-
-        // otherwise add the bucket
-        this.buckets.push(bucket)
-        this.bucketMap.set(bucket.name, bucket)
-    }
-
-    getDefaultBucket() {
-        return this.buckets[0]
-    }
-}
 
 const interactionLoop = async (main: Box, pathToPerdita: string) => {
     const bucketManager = new BucketManager(pathToPerdita)
@@ -210,29 +33,50 @@ const interactionLoop = async (main: Box, pathToPerdita: string) => {
 
 const interactWithBucket = async (main: Box, bucket: Bucket) => {
     const linesAvailible = main.paddedHeight
+    const linesPerSide = round(linesAvailible - 1 / 2, 'down')
     
-    let indexes = new Map([[0, 0]])
     let horizontalMovement = 0
     const limitRight = 1
     const limitLeft = 0
 
-    const getCurrentIndex = () => indexes.get(horizontalMovement)
-    const getCurrentIdea = () => bucket.ideas[getCurrentIndex()]
+    const debug = false
 
+    let currentIdea: Idea | null = bucket.ideaChain.getStartingLink()
 
     const render = () => {
         main.focus()
         main.clear()
-        if (bucket.ideas.length === 0) {
+        if (!currentIdea) {
             main.write(`None of your ideas have been captured yet.`)
             main.writeOnNewline('Best get writing! Press |fg[green];b>+| to add an idea')
         } else {
-            const currentIndex = getCurrentIndex()
-            const currentIdea = getCurrentIdea()
-            for (let [index, idea] of bucket.ideas.entries()) {
-                
-                if (index)
+            const ideaBefore = currentIdea.getLinksBefore(linesPerSide) as Idea[]
+            const ideasAfter = currentIdea.getLinksAfter(linesPerSide) as Idea[]
 
+            const ideasToRender = [
+                ...ideaBefore.reverse(),
+                currentIdea,
+                ...ideasAfter
+            ]
+
+            
+            
+            for (let idea of ideasToRender) {
+                const debugData = ` ::: p: ${idea.previous?.name ?? '-'}, n: ${idea.next?.name ?? '-'}`
+
+                if (idea.id === currentIdea.id) {
+                    switch (horizontalMovement) {
+                        case 1: {
+                            main.writeOnNewline(`${' <--- '}|inverse>${idea.name}|${debug ? debugData : ''}`)
+                            break
+                        }
+                        default: {
+                            main.writeOnNewline(`|inverse>${idea.name}|${debug ? debugData : ''}`)
+                        }
+                    }
+                } else {
+                    main.writeOnNewline(`${idea.name}${debug ? debugData : ''}`)
+                }
             }
         }
         
@@ -253,8 +97,7 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
                             // scrolls to the new idea
                             try {
                                 bucket.addIdea(idea)
-                                currentIndex = idea.rank
-                                current = idea
+                                currentIdea = bucket.ideaChain.getEndingLink()
                             } catch (error) {
                                 throw error // need to handle duplicate names here
                             }
@@ -264,15 +107,41 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
                         shouldContinue = false
                     }),
                     target(Keys.ArrowDown, async () => {
-                        currentIndex = (currentIndex + 1) % bucket.ideas.length
-                        if (horizontalMovement === 0) {
-                            current = bucket.ideas[currentIndex]
+                        if (currentIdea) {
+                            const prev = currentIdea
+                            if (!currentIdea.next) {
+                                currentIdea = bucket.ideaChain.getStartingLink()
+                                if (horizontalMovement === 1 && prev !== currentIdea) {
+                                    prev.remove()
+                                    currentIdea.prepend(prev)
+                                    currentIdea = prev
+                                }
+                            } else {
+                                currentIdea = currentIdea.next
+                                if (horizontalMovement === 1) {
+                                    prev.swap(currentIdea)
+                                    currentIdea = prev
+                                }
+                            }
                         }
                     }),
                     target(Keys.ArrowUp, async () => {
-                        currentIndex = currentIndex - 1 < 0 ? bucket.ideas.length - 1 : currentIndex - 1
-                        if (horizontalMovement === 0) {
-                            current = bucket.ideas[currentIndex]
+                        if (currentIdea) {
+                            const prev = currentIdea
+                            if (!currentIdea.previous) {
+                                currentIdea = bucket.ideaChain.getEndingLink()
+                                if (horizontalMovement === 1 && prev !== currentIdea) {
+                                    prev.remove()
+                                    currentIdea.append(prev)
+                                    currentIdea = prev
+                                }
+                            } else {
+                                currentIdea = currentIdea.previous
+                                if (horizontalMovement === 1) {
+                                    prev.swap(currentIdea)
+                                    currentIdea = prev
+                                }
+                            }
                         }
                     }),
                     target(Keys.ArrowRight, async () => {
@@ -283,22 +152,6 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
                     target(Keys.ArrowLeft, async () => {
                         if (horizontalMovement - 1 >= limitLeft) {
                             horizontalMovement--
-                            
-                            if (horizontalMovement === 0) {
-                                if (currentIndex != current.rank) {
-                                    let resortedIdeas = []
-                                    for (let [index, idea] of bucket.ideas.entries()) {
-                                        if (currentIndex === index) {
-                                            resortedIdeas.push()
-                                        }
-                                        if (idea.id !== current.id) {
-                                            resortedIdeas.push(idea)
-                                        }
-                                    }
-                                    resortedIdeas.forEach((val, i) => val.rank = i)
-                                    bucket.ideas = resortedIdeas
-                                }
-                            }
                         }
                     })
                     
@@ -316,11 +169,12 @@ const newIdeaInteraction = async (box: Box) : Promise<Idea | void> => {
     let name = ''
     let shouldContinue = true
     let done = false
+    box.return()
 
     while (shouldContinue && !done) {
         box.clearLine()
         box.write(
-            `Write your idea here (press enter to finish, or escape to cancel): ${name}`
+            `${name}`
         )
         box.terminal.showCursor()
 
@@ -328,7 +182,12 @@ const newIdeaInteraction = async (box: Box) : Promise<Idea | void> => {
             targets: [
                 target(Keys.Enter, () => done = true),
                 target(Keys.Escape, () => shouldContinue = false),
-                target(Keys.Backspace, () => name = name.slice(0, -1)),   
+                target(Keys.Backspace, () => name = name.slice(0, -1)),  
+                target(Keys.Delete, () => name = name.slice(0, -1)),
+                target(Keys.ArrowUp, () => undefined),
+                target(Keys.ArrowRight, () => undefined),
+                target(Keys.ArrowDown, () => undefined),
+                target(Keys.ArrowLeft, () => undefined),
             ],
             catchAll: (raw: Buffer) => () => {
                 name += raw.toString()

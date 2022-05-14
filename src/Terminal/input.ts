@@ -70,6 +70,7 @@ export enum Keys {
   Space = '32',
   Enter = '13',
   Backspace = '8',
+  Delete = '127',
 
   PlusSign = '43',
   MinusSign = '45',
