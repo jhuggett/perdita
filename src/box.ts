@@ -226,9 +226,10 @@ export class Box {
           this.terminal.writeWithMarkup(content)
         }
         this.lastKnownCursorLocation = new Coor(
-          this.terminal.cursor.location.x(),
-          this.terminal.cursor.location.y()
+          this.terminal.cursor.location.current().x,
+          this.terminal.cursor.location.current().y
         )
+        return this
     }
 
 
@@ -242,16 +243,15 @@ export class Box {
         this.write(' '.repeat(width))
       }
       this.moveCursor.to.start()
+      return this
     }
   
     return() {
-      if (this.lastKnownCursorLocation.y + 1 > this.paddedEnd.y) {
-        throw new ReturnExceedsHeightError()
-      }
       this.moveCursor.to.location(
         this.paddedStart.x,
-        this.lastKnownCursorLocation.y + 1
+        this.terminal.cursor.location.current().y + 1
       )
+      return this
     }
 
     focus() {

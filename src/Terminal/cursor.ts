@@ -9,9 +9,9 @@ export class Cursor {
     private write: (str: string, isEscaped: boolean) => void
   ) {}
     
-  moveCursorToCurrentLocation() {
+  moveCursorToCurrentLocation() { // add 1 to each because 1,1 is the top left corner
     const location = this.cursorLocations[this.cursorLocationsCurrentIndex]
-    this.write(`\u001b[${location.y};${location.x}H`, true)
+    this.write(`\u001b[${location.y + 1};${location.x + 1}H`, true)
   }
 
   move = { // TODO: add by, allowing postive/negative x and y input
@@ -64,8 +64,8 @@ export class Cursor {
     y: () => {
       return this.location.current().y
     },
-    set: (x: number, y: number) => { // add 1 to each because 1,1 is the top left corner
-      this.cursorLocations = [new Coor(x + 1, y + 1), ...this.cursorLocations.slice(0, this.cursorLocationsLengthLimit)]
+    set: (x: number, y: number) => { 
+      this.cursorLocations = [new Coor(x, y), ...this.cursorLocations.slice(0, this.cursorLocationsLengthLimit)]
       this.cursorLocationsCurrentIndex = 0
       this.moveCursorToCurrentLocation()
     },

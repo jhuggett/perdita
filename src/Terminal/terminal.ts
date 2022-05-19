@@ -1,6 +1,7 @@
 import { ESCAPE_CODE } from "."
 import { Coor } from "../Coordinate"
 import { Cursor } from "./cursor"
+import { parseMarkup, Section } from "./terminal-markup"
 
 export function percent(percent: number) : number {
   return percent / 100
@@ -28,14 +29,6 @@ export function dropDecimalPlacesPast(places: number, forNumber: number) {
 
 export class Terminal {  
   cursor: Cursor = new Cursor(this.write)
-
-  colors: Map<string, number[]> = new Map([
-    ['white', [255, 255, 255]],
-    ['black', [0, 0, 0]],
-    ['red', [255, 0, 0]],
-    ['green', [0, 255, 0]],
-    ['blue', [0, 0, 255]]
-  ])
   
   write(content: string, escaped = false, wrap = true) {
     let contentToWrite = content
@@ -46,73 +39,21 @@ export class Terminal {
     process.stdout.write(contentToWrite)
   }
 
-  performInstruction(instruction: string) {
-    if (instruction === 'b' || instruction === 'bold') {
-      this.style.set.bold.on()
-      return
-    }
-    if (instruction === 'i' || instruction === 'italic') {
-      this.style.set.italic.on()
-      return
-    }
-    if (instruction === 'u' || instruction === 'underline') {
-      this.style.set.underline.on()
-      return
-    }
-    if (instruction === 'inverse') {
-      this.style.set.inverse.on()
-      return
-    }
-    if (instruction.startsWith('fg') || instruction.startsWith('foreground')) {
-      const color = /(?<=\[)(.*?)(?=\])/mg.exec(instruction)[0]
-      let code: number[] = []
-      if (this.colors.has(color)) {
-        code = this.colors.get(color)
-      } else {
-        code = color.split(',').map(i => parseInt(i))
-      }
-      this.color.foreground.set.rgb(code[0], code[1], code[2])
-      return
-    }
-    if (instruction.startsWith('bg') || instruction.startsWith('background')) {
-      const color = /(?<=\[)(.*?)(?=\])/mg.exec(instruction)[0]
-      let code: number[] = []
-      if (this.colors.has(color)) {
-        code = this.colors.get(color)
-      } else {
-        code = color.split(',').map(i => parseInt(i))
-      }
-      this.color.background.set.rgb(code[0], code[1], code[2])
-      return
-    }
-    if (instruction === 'strikethrough') {
-      this.style.set.strikethrough.on()
-      return
-    }
-  }
-
-  writeWithMarkup(content: string) {
-    const sections = content.split(/(?<!\\)\|/mg)
-
+  executeSections(sections: Section[]) {
     for (let section of sections) {
-      const [instructions, str] = section.split('>')
-
-      if (!str) { // meaning instructions contains the content
-        this.write(instructions, false)
-        continue
+      for (let instruction of section.instructions) {
+        instruction.enact(this)
       }
-
-      for (let instruction of instructions.split(';')) {
-        this.performInstruction(instruction)
-      }
-
-      this.write(str, false)
+      this.write(section.content)
       this.style.resetAll()
       this.color.reset()
     }
   }
 
-  
+  writeWithMarkup(markup: string) {
+    this.executeSections(parseMarkup(markup))
+  }
+
   constructor() {
     this.style.resetAll()
     this.color.reset()

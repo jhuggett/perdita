@@ -43,9 +43,27 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
 
     let currentIdea: Idea | null = bucket.ideaChain.getStartingLink()
 
+
+    // switch (player.previousTile.coor.getDirection(player.tile.coor)[0]) {
+    //     case Direction.east: {
+    //       return '►'
+    //     }
+    //     case Direction.south: {
+    //       return '▼'
+    //     }
+    //     case Direction.west: {
+    //       return '◄'
+    //     }
+    //     case Direction.north: {
+    //       return '▲'
+    //     }
+    //   }
+
     const render = () => {
-        main.focus()
         main.clear()
+        .write(`underline;foreground[green]>${bucket.name}:`)
+        .return()
+        .return()
         if (!currentIdea) {
             main.write(`None of your ideas have been captured yet.`)
             main.writeOnNewline('Best get writing! Press |fg[green];b>+| to add an idea')
@@ -59,24 +77,23 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
                 ...ideasAfter
             ]
 
-            
-            
             for (let idea of ideasToRender) {
                 const debugData = ` ::: p: ${idea.previous?.name ?? '-'}, n: ${idea.next?.name ?? '-'}`
 
                 if (idea.id === currentIdea.id) {
                     switch (horizontalMovement) {
                         case 1: {
-                            main.writeOnNewline(`${' <--- '}|inverse>${idea.name}|${debug ? debugData : ''}`)
+                            main.write(`b>◄ ${idea.name} ►`)
                             break
                         }
                         default: {
-                            main.writeOnNewline(`|inverse>${idea.name}|${debug ? debugData : ''}`)
+                            main.write(`b>◄► ${idea.name}`)
                         }
                     }
                 } else {
-                    main.writeOnNewline(`${idea.name}${debug ? debugData : ''}`)
+                    main.write(`   ${idea.name}`)
                 }
+                main.return()
             }
         }
         
@@ -91,7 +108,16 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
             const response = await input({
                 targets: [
                     target(Keys.PlusSign, async () => {
-                        const idea = await newIdeaInteraction(main)
+                        const idea = await newIdeaInteraction(main, (idea) => {
+                            if (bucket.ideaMap.has(idea)) {
+                                return 'Idea already exists!'
+                            }
+                            if (!idea.replace(/\s/g, '').length) { // only whitespaces
+                                return `Well that's not much of an idea.`
+                            }
+
+                            return null
+                        })
                         if (idea) {
                             // add idea to bucket
                             // scrolls to the new idea
@@ -99,7 +125,7 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
                                 bucket.addIdea(idea)
                                 currentIdea = bucket.ideaChain.getEndingLink()
                             } catch (error) {
-                                throw error // need to handle duplicate names here
+                                throw error 
                             }
                         }
                     }),
@@ -165,23 +191,35 @@ const interactWithBucket = async (main: Box, bucket: Bucket) => {
     }
 }
 
-const newIdeaInteraction = async (box: Box) : Promise<Idea | void> => {
+const newIdeaInteraction = async (box: Box, validate: (idea: string) => string | null) : Promise<Idea | void> => {
     let name = ''
     let shouldContinue = true
     let done = false
-    box.return()
 
-    while (shouldContinue && !done) {
-        box.clearLine()
+    while (shouldContinue) {
+        box.clear()
+        if (done) {
+            const validation = validate(name)
+            if (validation) {
+                box.write(`fg[red]>${validation}`)
+                .return()
+                done = false
+            } else {
+                break
+            }
+        }
         box.write(
-            `${name}`
+            `|b;i>Enter your idea (ESC to cancel):| ${name}`
         )
         box.terminal.showCursor()
 
         ;(await input<() => void>({
             targets: [
                 target(Keys.Enter, () => done = true),
-                target(Keys.Escape, () => shouldContinue = false),
+                target(Keys.Escape, () => {
+                    shouldContinue = false
+                    done = false
+                }),
                 target(Keys.Backspace, () => name = name.slice(0, -1)),  
                 target(Keys.Delete, () => name = name.slice(0, -1)),
                 target(Keys.ArrowUp, () => undefined),
